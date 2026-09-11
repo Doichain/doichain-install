@@ -88,6 +88,85 @@ Result, on a fresh node with no stopgap: headers `0 → 431017` in **~80 seconds
 `Ignoring low-work chain` 0×, `invalid difficulty transition` 0×, `insufficient
 work` 0×.
 
+## Next step: clean reinstall rehearsal on the Hetzner node
+
+Only **one** node has been rolled out so far, and it is worth tearing down and
+rebuilding from scratch — because **nothing currently runs the way compose would
+run it**. Every container on the host was started by hand with an overridden
+entrypoint:
+
+```
+doichain   entrypoint=["doichaind"]              <- manual
+bitcoin    entrypoint=["bitcoind"]               <- manual
+p2pool     entrypoint=["/usr/bin/pypy"]          <- manual
+```
+
+So the path a new operator actually takes — `docker compose up` — has never been
+executed end to end. A clean redo validates exactly that, and is the cheapest way
+to find the next surprise before other nodes are migrated.
+
+**Risk to the network: none.** The node runs with `-listen=0` and has
+`connections_in: 0` — it is a pure leaf serving nobody. The chain advanced from
+431017 to 434542 without it.
+
+### :rotating_light: Back up the datadir first — it may be the only copy
+
+Our node is currently the **only** one running the new consensus
+(`DoiDifficultyHeight = 431017`). The other nodes do not have it: the `0.20.99`
+peers sit at ~**430990**, i.e. *behind* the fork, and the `31.1.0` nodes predate
+the rollout chainparams (commit `8688c86`), so they do not carry the flag day
+either. None of them can serve a block past the fork.
+
+That is already observable: block **431017** sits at `status: headers-only` on the
+freshly synced node, with **no rejection in the log** — nobody is serving the block
+body. A wiped node would resync to 431016 from the old peers and then **stop
+there, permanently**, because there is no peer to supply the post‑fork chain.
+
+**Therefore the post‑fork blocks may exist only in our `doichain-data` volume.**
+Take a copy off the host *before* deleting anything:
+
+```bash
+docker run --rm -v doichain-data:/d -v /root:/out alpine:3.20 \
+  tar czf /out/doichain-data-backup.tgz -C /d .
+# then copy it off the machine
+```
+
+Restoring that volume is also the fallback if the rehearsal cannot resync.
+
+### Preconditions (all of these, or the node will not come back)
+
+1. **Peer list is mandatory.** With the DNS seeds dead (see below) a fresh node
+   never finds the network. The `-addnode` entries are now in the compose file.
+   *This is the one that would strand the host.*
+2. **Keep `bitcoin-data` (11.3 GB).** Only ~7.6 GB is free on the host; a fresh
+   pruned-parent bootstrap needs ~24 GB peak and cannot succeed here. Wipe only
+   the Doichain side (`doichain-data`, test volumes).
+3. **The image cannot be built on the host** — compose builds doichaind from the
+   *private* `doichain-core`, to which the host has no access. Publish
+   `doichain/core:v31.1.2` to Docker Hub, or pre-load it before `compose up`.
+
+### Version
+
+The fixed binary is **not** the `v31.1.1` that was shipped — it carries four
+consensus-adjacent commits. By this document's own rule (never reuse a version),
+it goes out as **`v31.1.2`**; `CLIENT_VERSION_BUILD` and the compose tag are set
+accordingly.
+
+### Sequence
+
+```
+# 1. keep bitcoin-data, drop the Doichain side
+docker rm -f doichain p2pool doichain-fix3
+docker volume rm doichain-data doichain-fix3-vol
+# 2. pre-load doichain/core:v31.1.2   (until it is on Docker Hub)
+# 3. the real path, for the first time
+docker compose -f docker-compose-mining.yml up -d
+```
+
+Then verify: doichaind is PID 1, conf and chain land on the volume, the node finds
+peers, p2pool reports `Got new merged mining work!`. Only after that migrate the
+remaining nodes one at a time.
+
 ## Open issues
 
 - [ ] **Peer discovery is broken for fresh nodes.** :rotating_light: `dnsseed.doichain.org`

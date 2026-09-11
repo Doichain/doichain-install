@@ -55,17 +55,24 @@ services:
    build:
      context: ./doichain
      args:
-       DOICHAIN_VER: "v31.1.1"   # release tag
-   image: "doichain/core:v31.1.1"
+       DOICHAIN_VER: "v31.1.2"   # release tag
+   image: "doichain/core:v31.1.2"
    container_name: doichain
    hostname: doichain
    ports:
-     - "8339:8339"
+     - "8338:8338"   # P2P - required, see bind= in the generated conf
+     - "8339:8339"   # RPC
    volumes:
      - doichain-volume:/home/doichain/data
    environment:
      - RPC_PASSWORD=password
      - RPC_ALLOW_IP=0.0.0.0/0 #::/0
+     # Peer discovery is currently broken: dnsseed.doichain.org and seed.doi.works
+     # return zero addresses and the binary has no fixed seeds compiled in, so a
+     # node with an empty addrman never finds the network ("Added 0 fixed seeds").
+     # These are peers observed serving mainnet on 2026-09-11. Remove once the
+     # seeds work again -- see https://github.com/Doichain/doichain-install/issues/3
+     - DOICHAIN_EXTRA_ARGS=-addnode=2.28.75.43 -addnode=136.243.155.62 -addnode=116.203.99.217 -addnode=128.140.44.20 -addnode=195.201.129.97 -addnode=94.130.57.196
    stdin_open: true
    tty: true
    networks:
