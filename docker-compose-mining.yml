@@ -1,10 +1,42 @@
 version: '3.7'
 
 services:
-  bitcoin: 
+  bitcoin-init:
+    # First-run bootstrap: fetch doi.works' nightly pruned snapshot into the bitcoin
+    # data volume so bitcoind starts near the chain tip instead of a multi-hour IBD.
+    # This replaces the dead prunednode.today URL baked into the doichain/bitcoind
+    # image (that domain expired). No-op if a chainstate already exists in the volume.
+    # Needs ~25 GB free during bootstrap (11 GB download + ~13 GB extracted), ~13 GB after.
+    image: alpine:3.20
+    volumes:
+      - bitcoin-volume:/data
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ -f /data/bitcoin/chainstate/CURRENT ]; then
+          echo "bitcoin chainstate present -> skip bootstrap"; exit 0
+        fi
+        echo "bootstrapping pruned bitcoin snapshot from doi.works ..."
+        apk add --no-cache curl tar >/dev/null
+        mkdir -p /data/bitcoin
+        curl -fL --retry 5 --retry-delay 5 -C - https://www.doi.works/pruned/bitcoin-pruned.tgz -o /data/snapshot.tgz
+        tar xzf /data/snapshot.tgz -C /data/bitcoin --strip-components=1
+        rm -f /data/snapshot.tgz
+        echo "bootstrap done: $(ls /data/bitcoin)"
+    restart: "no"
+    networks:
+      static-network:
+        ipv4_address: 172.21.0.4
+
+  bitcoin:
     image: "doichain/bitcoind:v0.20.0"
     container_name: bitcoin
     hostname: bitcoin
+    depends_on:
+      bitcoin-init:
+        condition: service_completed_successfully
     ports:
       - "8332:8332"
       - "8333:8333"
