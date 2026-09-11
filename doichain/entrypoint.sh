@@ -46,7 +46,17 @@ fi
 # on any port'. Setting -listenonion=0 does NOT help: it only skips
 # StartTorControl. An explicit bind makes init derive the onion target from
 # vBinds instead, so nothing extra is bound.
-# NOTE: testnet has the same collision (18338/18339) and needs the same fix.
+#
+# The bind uses _NODE_PORT rather than a literal 8338, so testnet (18338/18339)
+# and regtest get the same protection -- they have the identical collision.
+# Because bind carries the port, the per-section port= lines are redundant and
+# were dropped: they were generated from the *active* network's port and written
+# into both [test] and [regtest], so one of the two was always wrong.
+#
+# wallet=1 is deliberately absent. It looks like an on/off switch but is not:
+# -wallet takes a wallet *name*, so Core 31 reads it as "load the wallet called
+# 1", fails to find one, and logs an error on every start. The wallet component
+# is enabled by default; the wallets to load belong in settings.json.
 DOICHAIN_CONF_FILE=/home/doichain/data/doichain/doichain.conf
 mkdir -p "$(dirname "$DOICHAIN_CONF_FILE")"
 if [ ! -f "$DOICHAIN_CONF_FILE" ]; then
@@ -55,9 +65,8 @@ echo "
 regtest=$_REGTEST
 testnet=$_TESTNET
 server=1
-bind=0.0.0.0:8338
+bind=0.0.0.0:${_NODE_PORT}
 listenonion=0
-wallet=1
 rpcuser=${RPC_USER}
 rpcpassword=${RPC_PASSWORD}
 rpcbind=0.0.0.0
@@ -73,15 +82,11 @@ walletnotify=curl -X GET ${DAPP_URL}/api/v1/walletnotify?tx=%s
 rpcport=${_RPC_PORT}
 rpcbind=0.0.0.0
 rpcallowip=0.0.0.0/0
-wallet=1
-port=${_NODE_PORT}
 
 [regtest]
 rpcport=${_RPC_PORT}
 rpcbind=0.0.0.0
-rpcallowip=0.0.0.0/0
-wallet=1
-port=${_NODE_PORT}" > $DOICHAIN_CONF_FILE
+rpcallowip=0.0.0.0/0" > $DOICHAIN_CONF_FILE
 fi
 
 exec "$@"

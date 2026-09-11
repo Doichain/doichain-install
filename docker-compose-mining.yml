@@ -55,10 +55,16 @@ services:
    build:
      context: ./doichain
      args:
-       DOICHAIN_VER: "v31.1.2"   # release tag
-   image: "doichain/core:v31.1.2"
+       DOICHAIN_VER: "v31.1.3"   # release tag
+   image: "doichain/core:v31.1.3"
    container_name: doichain
    hostname: doichain
+   # The node is useless to the network if it cannot be reached: without an
+   # inbound path it never appears in anyone's addrman, the DNS seeder never
+   # learns it, and it can only ever make outbound connections. Publishing 8338
+   # is therefore not optional -- a node started with plain `docker run` and no
+   # -p was listening happily inside its namespace with connections_in=0.
+   restart: unless-stopped
    ports:
      - "8338:8338"   # P2P - required, see bind= in the generated conf
      - "8339:8339"   # RPC
@@ -67,11 +73,14 @@ services:
    environment:
      - RPC_PASSWORD=password
      - RPC_ALLOW_IP=0.0.0.0/0 #::/0
-     # Peer discovery is currently broken: dnsseed.doichain.org and seed.doi.works
-     # return zero addresses and the binary has no fixed seeds compiled in, so a
-     # node with an empty addrman never finds the network ("Added 0 fixed seeds").
-     # These are peers observed serving mainnet on 2026-09-11. Remove once the
-     # seeds work again -- see https://github.com/Doichain/doichain-install/issues/3
+     # Bootstrap belt-and-braces. As of v31.1.3 the binary ships real fixed
+     # seeds, and dnsseed.doichain.org is healthy (18 addresses, all answering
+     # on 8338 when last checked). But both of those find the *old* chain: none
+     # of those peers follow DigiShield yet. Until a second DigiShield node is
+     # reachable, an explicit peer list is what keeps a fresh node from syncing
+     # to 431016 and stopping there.
+     # seed.doi.works is in chainparams but has no NS record at all -- the zone
+     # was never delegated. See https://github.com/Doichain/doichain-install/issues/3
      - DOICHAIN_EXTRA_ARGS=-addnode=2.28.75.43 -addnode=136.243.155.62 -addnode=116.203.99.217 -addnode=128.140.44.20 -addnode=195.201.129.97 -addnode=94.130.57.196
    stdin_open: true
    tty: true
