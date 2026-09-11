@@ -20,7 +20,11 @@ services:
         ipv4_address: 172.21.0.5
 
   doichain:
-   image: "doichain/core:dc0.20.1.13" 
+   build:
+     context: ./doichain
+     args:
+       DOICHAIN_VER: "feat/digishield-daa"   # → set to the release tag (e.g. v31.1.1) once cut
+   image: "doichain/core:v31.1.1"
    container_name: doichain
    hostname: doichain
    ports:

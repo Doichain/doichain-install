@@ -1,123 +1,65 @@
-FROM ubuntu:18.04
+# Doichain Core 31.1 — nc31.1 / Bitcoin Core 31 base, built with CMake.
+# (Replaces the old 0.20-era autotools + BerkeleyDB 4.8 build.)
+# Pin the source at build time:  --build-arg DOICHAIN_VER=v31.1.1
+FROM debian:12
 
-ARG DOICHAIN_VER=master
-ENV DOICHAIN_VER $DOICHAIN_VER
+ARG DOICHAIN_VER=feat/digishield-daa
+ENV DOICHAIN_VER=$DOICHAIN_VER
 
-#Setup run vars
-ENV CONFIRM_ADDRESS ""
-ENV CONNECTION_NODE 116.203.34.154
-ENV DAPP_URL http://localhost:3000
-ENV NODE_PORT 8338
-ENV NODE_PORT_TESTNET 18338
-ENV NODE_PORT_REGTEST 18445
-ENV REGTEST false
-ENV TESTNET false
-ENV RPC_ALLOW_IP 172.17.0.0/16
-ENV RPC_PASSWORD ""
-ENV RPC_PORT 8339
-ENV RPC_PORT_TESTNET 18339
-ENV RPC_PORT_REGTEST 18332
-ENV RPC_USER admin
+# Runtime / start-script vars (ports match Core 31: P2P 8338, RPC 8339)
+ENV CONFIRM_ADDRESS="" \
+    CONNECTION_NODE=116.203.34.154 \
+    DAPP_URL=http://localhost:3000 \
+    NODE_PORT=8338 NODE_PORT_TESTNET=18338 NODE_PORT_REGTEST=18445 \
+    REGTEST=false TESTNET=false \
+    RPC_ALLOW_IP=172.17.0.0/16 RPC_PASSWORD="" \
+    RPC_PORT=8339 RPC_PORT_TESTNET=18339 RPC_PORT_REGTEST=18332 \
+    RPC_USER=admin
 
-#Install dependencies
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-	libtool \
-	autotools-dev \
-	automake \
-	pkg-config \
-	bsdmainutils \
-	python3 \
-	libevent-dev \
-	libboost-system-dev libboost-filesystem-dev libboost-test-dev libboost-thread-dev \
-	libzmq3-dev \
-	autoconf \
-	apt-utils \
-	bsdmainutils \
-	build-essential \
-	curl \
-	jq \
-	vim \
-	bc \
-	dos2unix \
-	git \
-	locales \
-	sudo \
-	&& rm -rf /var/lib/apt/lists/*
+# Build + runtime dependencies for Core 31 (CMake, C++20, libevent, SQLite).
+# No BerkeleyDB: Core 31 dropped legacy BDB wallets; wallets are SQLite (descriptor).
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential cmake pkg-config git ca-certificates python3 \
+      libevent-dev libboost-dev libsqlite3-dev \
+      curl jq bc dos2unix locales sudo \
+    && rm -rf /var/lib/apt/lists/*
 
-#RUN export tar='bsdtar'
+RUN sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en
 
-
-#Install locales
-RUN locale-gen ${OS_LOCALE}
-
-ENV OS_LOCALE en_US.UTF-8
-ENV LANG ${OS_LOCALE}
-ENV LANGUAGE en_US:en
-#ENV LC_ALL ${OS_LOCALE}
-
-#Set user
-WORKDIR /
 RUN adduser --disabled-password --gecos '' doichain && \
-	adduser doichain sudo && \
-	echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+    adduser doichain sudo && \
+    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 USER doichain
 
-#Install berkeley-db
-WORKDIR /tmp/build/bdb
-ADD http://download.oracle.com/berkeley-db/db-4.8.30.NC.tar.gz db-4.8.30.NC.tar.gz
-RUN echo '12edc0df75bf9abd7f82f821795bcee50f42cb2e5f76a6a281b85732798364ef  db-4.8.30.NC.tar.gz' | sudo sha256sum -c && \
-	sudo tar xzvf db-4.8.30.NC.tar.gz && \
-	cd db-4.8.30.NC/build_unix/ && \
-	sudo ../dist/configure --enable-cxx && \
-	#sudo rm /usr/include/db.h && \
-	sudo make && \
-	sudo make install && \
-	sudo ln -s /usr/local/BerkeleyDB.4.8 /usr/include/db4.8 && \
-	sudo ln -s /usr/include/db4.8/lib/* /usr/lib && \
-    sudo ln -s /usr/include/db4.8/include/* /usr/include
-
-#Install doichain-core
+# Build Doichain Core with CMake (GUI/IPC/tests/bench/ZMQ off, SQLite wallet on),
+# install doichaind + doichain-cli, then drop the build tree to keep the image small.
 WORKDIR /home/doichain
-RUN mkdir .doichain && \
-	sudo git clone --branch $DOICHAIN_VER https://github.com/Doichain/doichain-core.git && \
-	cd doichain-core && \
-	sudo ./autogen.sh && sudo ./configure --without-gui --disable-tests  --disable-gui-tests && \
-	sudo make && \
-	sudo make install
+RUN git clone --branch "$DOICHAIN_VER" --depth 1 https://github.com/Doichain/doichain-core.git && \
+    cd doichain-core && \
+    cmake -B build -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_GUI=OFF -DENABLE_IPC=OFF -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF \
+      -DWITH_ZMQ=OFF -DENABLE_WALLET=ON && \
+    cmake --build build -j"$(nproc)" --target doichaind doichain-cli && \
+    sudo install -m0755 build/bin/doichaind build/bin/doichain-cli /usr/local/bin/ && \
+    doichaind --version | head -1 && \
+    cd /home/doichain && sudo rm -rf doichain-core/build
 
-#Copy start scripts
+# Start scripts
 WORKDIR /home/doichain/scripts/
 COPY entrypoint.sh entrypoint.sh
 COPY start.sh start.sh
 COPY getblocktimes.sh getblocktimes.sh
 COPY doichain-start.sh doichain-start.sh
+RUN sudo dos2unix entrypoint.sh start.sh doichain-start.sh && \
+    sudo chmod +x entrypoint.sh start.sh doichain-start.sh getblocktimes.sh
 
-RUN sudo dos2unix \
-	entrypoint.sh \
-	start.sh \
-	doichain-start.sh && \
-	sudo chmod +x \
-	entrypoint.sh \
-	start.sh \
-	doichain-start.sh \
-	getblocktimes.sh && \
-	sudo apt-get purge -y dos2unix && \
-	sudo rm -rf /var/lib/apt/lists/*
-
-#Create data dir
+# Data dir: ~/.doichain -> persisted volume at /home/doichain/data/doichain
 WORKDIR /home/doichain
-RUN mkdir data && \
-	cd data && \
-	mkdir doichain &&\
-	sudo rm -rf /home/doichain/.doichain && \
-	sudo ln -s /home/doichain/data/doichain /home/doichain/.doichain
+RUN mkdir -p data/doichain && ln -s /home/doichain/data/doichain /home/doichain/.doichain
 
-#Run entrypoint
 WORKDIR /home/doichain
 ENTRYPOINT ["scripts/entrypoint.sh"]
-
-#Start doichain and meteor
 CMD ["scripts/start.sh"]
 
-#Expose ports
-EXPOSE $NODE_PORT $RPC_PORT $RPC_PORT_REGTEST
+EXPOSE 8338 8339 18338 18339
