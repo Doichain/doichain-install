@@ -57,6 +57,19 @@ fi
 # -wallet takes a wallet *name*, so Core 31 reads it as "load the wallet called
 # 1", fails to find one, and logs an error on every start. The wallet component
 # is enabled by default; the wallets to load belong in settings.json.
+#
+# EXTERNAL_IP matters more than it looks. Core learns the address it advertises
+# from Discover(), which walks the local interfaces -- inside a container those
+# are a private 172.x, which is not routable and so is never announced. The node
+# then accepts inbound connections perfectly well while telling nobody it
+# exists: no peer gossips it, no DNS seeder crawls it, and it stays invisible
+# however open the port is. Set this to the host's public address on any node
+# that should be reachable.
+EXTERNAL_IP_LINE=""
+if [ -n "${EXTERNAL_IP:-}" ]; then
+  EXTERNAL_IP_LINE="externalip=${EXTERNAL_IP}"
+  echo "advertising external address: ${EXTERNAL_IP}"
+fi
 DOICHAIN_CONF_FILE=/home/doichain/data/doichain/doichain.conf
 mkdir -p "$(dirname "$DOICHAIN_CONF_FILE")"
 if [ ! -f "$DOICHAIN_CONF_FILE" ]; then
@@ -67,6 +80,7 @@ testnet=$_TESTNET
 server=1
 bind=0.0.0.0:${_NODE_PORT}
 listenonion=0
+${EXTERNAL_IP_LINE}
 rpcuser=${RPC_USER}
 rpcpassword=${RPC_PASSWORD}
 rpcbind=0.0.0.0
