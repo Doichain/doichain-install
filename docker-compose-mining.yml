@@ -66,13 +66,6 @@ services:
    environment:
      - RPC_PASSWORD=password
      - RPC_ALLOW_IP=0.0.0.0/0 #::/0
-     # STOPGAP: Core 24+ headers-presync validates PoW against the bare header
-     # hash, which fails on AuxPoW blocks -- presync aborts at Doichain's first
-     # AuxPoW block and a fresh node never syncs (headers stay 0). Bypassing
-     # presync makes the AuxPoW-aware path do the work. Verified: 0 -> 431016 in
-     # ~5 min. Remove once doichain-core's HeadersSyncState is AuxPoW-aware.
-     # See https://github.com/Doichain/doichain-install/issues/3
-     - DOICHAIN_EXTRA_ARGS=-minimumchainwork=0
    stdin_open: true
    tty: true
    networks:

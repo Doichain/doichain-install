@@ -34,6 +34,19 @@ if [ -z ${DAPP_URL} ]; then
 	_DAPP_URL=$DAPP_URL
 fi
 
+# NOTE: everything between the quotes below is written verbatim into the conf --
+# keep backticks and double quotes OUT of it, or the shell breaks the string.
+#
+# Why the conf sets an explicit bind= :
+# Doichain's P2P (8338) and RPC (8339) ports are adjacent, and Core derives the
+# onion service target as P2P+1, i.e. exactly the RPC port. That target is pushed
+# into onion_binds unconditionally -- in init.cpp the push happens *before* the
+# if (listenonion) check -- so the P2P listener tries to bind 127.0.0.1:8339,
+# collides with the already-bound RPC, and the node dies with 'Failed to listen
+# on any port'. Setting -listenonion=0 does NOT help: it only skips
+# StartTorControl. An explicit bind makes init derive the onion target from
+# vBinds instead, so nothing extra is bound.
+# NOTE: testnet has the same collision (18338/18339) and needs the same fix.
 DOICHAIN_CONF_FILE=/home/doichain/data/doichain/doichain.conf
 mkdir -p "$(dirname "$DOICHAIN_CONF_FILE")"
 if [ ! -f "$DOICHAIN_CONF_FILE" ]; then
@@ -42,6 +55,8 @@ echo "
 regtest=$_REGTEST
 testnet=$_TESTNET
 server=1
+bind=0.0.0.0:8338
+listenonion=0
 wallet=1
 rpcuser=${RPC_USER}
 rpcpassword=${RPC_PASSWORD}
