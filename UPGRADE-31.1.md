@@ -46,11 +46,23 @@ bits    1a100334
 multiplied by the bounded emergency valve **×4** (mantissa 1 049 396) — the 9‑hour
 gap far exceeded `nDoiMinDifficultyGap`. The DAA behaved exactly as designed.
 
-**The chain is mining again.** By 16:15 UTC the network tip was **434 542**, i.e.
-**3 525 blocks** past the flag day. That is the expected post‑reset profile: the
-reset target is deliberately on the easy side, blocks come fast, and DigiShield
-ratchets the difficulty back up block by block until it settles at the real
-hashrate. Before the fork the chain had produced *no* block for ~9 hours.
+**We mined it ourselves.** The coinbase of 431017 pays 12.5 DOI to
+`NFgT2Gv6C9B9WaWQ51bz9FmPinYmy8wqTE` — the payout address handed to our p2pool —
+and the block timestamp (14:33:16 UTC) is the same second p2pool logged its first
+`Got new merged mining work!`. p2pool showed 0 H/s *local* hashrate: the share came
+off the shared p2pool sharechain and met the (valve‑relaxed) Doichain aux target.
+That is merge mining working as intended.
+
+**It propagated to the legacy network.** Asked directly via `getblockfrompeer`, the
+old `/Satoshi:0.20.99/` node `116.203.99.217` served the block body — confirming in
+practice that pre‑fork nodes accept and keep the post‑fork block.
+
+**But so far it is exactly one block.** `getchaintips` shows a single tip at
+431017; no block above it exists. Earlier notes in this file claimed a tip of
+434542 — that was wrong: it came from peers' self‑declared height in the version
+handshake, which two peers assert without ever serving headers to back it up.
+Verified chain state is **431017**. Sustained hashrate is still needed before the
+chain runs at its normal cadence.
 
 **No fork against the legacy nodes.** Doichain historically never enforced `nBits`
 (the chain was launched with the difficulty check disabled for the premine), so the
@@ -117,13 +129,16 @@ peers sit at ~**430990**, i.e. *behind* the fork, and the `31.1.0` nodes predate
 the rollout chainparams (commit `8688c86`), so they do not carry the flag day
 either. None of them can serve a block past the fork.
 
-That is already observable: block **431017** sits at `status: headers-only` on the
-freshly synced node, with **no rejection in the log** — nobody is serving the block
-body. A wiped node would resync to 431016 from the old peers and then **stop
-there, permanently**, because there is no peer to supply the post‑fork chain.
+**Update — this turned out better than feared.** The freshly synced node first
+showed 431017 as `status: headers-only`, which looked like nobody could serve the
+post‑fork block. Asked explicitly with `getblockfrompeer`, however, the old
+`/Satoshi:0.20.99/` node `116.203.99.217` **did** serve the block body, and the node
+went to `status: active`. The post‑fork block is therefore held by the legacy
+network too, not only by us — a wiped node can get it back. The `headers-only`
+state was a fetch that never got scheduled, not an availability gap.
 
-**Therefore the post‑fork blocks may exist only in our `doichain-data` volume.**
-Take a copy off the host *before* deleting anything:
+Back up anyway before deleting anything — it is 1.2 GB and buys a guaranteed
+rollback if the rehearsal goes sideways:
 
 ```bash
 docker run --rm -v doichain-data:/d -v /root:/out alpine:3.20 \
