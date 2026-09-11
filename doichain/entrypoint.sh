@@ -41,7 +41,6 @@ echo "DOICHAIN_CONF_FILE not found - generating new!"
 echo "
 regtest=$_REGTEST
 testnet=$_TESTNET
-daemon=1
 server=1
 wallet=1
 rpcuser=${RPC_USER}

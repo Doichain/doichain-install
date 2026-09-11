@@ -29,7 +29,6 @@ BITCOIN_CONF_FILE=/home/bitcoin/data/bitcoin/bitcoin.conf
 if [ ! -f "$BITCOIN_CONF_FILE" ]; then
     echo "BITCOIN_CONF_FILE not found - generating new!"
 	echo "
-	daemon=1
 	server=1
 	rpcuser=${RPC_USER}
 	rpcpassword=${RPC_PASSWORD}

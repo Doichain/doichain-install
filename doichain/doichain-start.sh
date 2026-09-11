@@ -17,4 +17,8 @@ fi
 # exec so doichaind becomes PID 1 -> a crash actually stops the container (so
 # restart policies fire) and `docker stop` signals doichaind for a clean shutdown
 # instead of signalling a wrapping bash.
-exec doichaind -datadir=/home/doichain/data/doichain $_REGTEST $_TESTNET ${DOICHAIN_EXTRA_ARGS:-}
+# -daemon=0 explicitly: in a container the process must stay in the foreground.
+# Passed on the command line (not just dropped from the generated conf) so that
+# deployments whose doichain.conf already contains `daemon=1` are overridden too --
+# the conf is only regenerated when missing.
+exec doichaind -datadir=/home/doichain/data/doichain -daemon=0 $_REGTEST $_TESTNET ${DOICHAIN_EXTRA_ARGS:-}
