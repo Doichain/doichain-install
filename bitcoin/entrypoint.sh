@@ -21,7 +21,7 @@ fi
 
 if [ -z ${RPC_PASSWORD} ]; then
 	#echo "generating password"
-	RPC_PASSWORD=$(xxd -l 30 -p /dev/urandom)
+	RPC_PASSWORD=$(openssl rand -hex 30)
 	echo "RPC_PASSWORD was not set, generated: "$RPC_PASSWORD
 fi
 echo "loooks good!"
@@ -44,14 +44,14 @@ CHAIN_DATA=/home/bitcoin/data/bitcoin/chainstate/CURRENT
 echo "checking if pruned bitcoin blockchain exists $CHAIN_DATA"
 if [ ! -f "$CHAIN_DATA" ]; then
     cd /home/bitcoin/data/bitcoin
-    echo "downloading purned bitcoin blockchain from prunednode.today"
-	curl -L https://www.doi.works/pruned/bitcoin-pruned.tgz  --output bitcoin-pruned.tgz
-	tar --exclude='bitcoin.conf' --exclude='bitcoind.pid' --exclude='debug.log' -xzvf  bitcoin-pruned.tgz
+    echo "downloading pruned bitcoin blockchain from doi.works"
+	curl -fL --retry 5 --retry-delay 5 -C - https://www.doi.works/pruned/bitcoin-pruned.tgz --output bitcoin-pruned.tgz
+	# snapshot entries are prefixed with ".bitcoin/" -> strip that component so
+	# blocks/ and chainstate/ land directly in the datadir bitcoind actually reads
+	tar --strip-components=1 --exclude='bitcoin.conf' --exclude='bitcoind.pid' --exclude='debug.log' -xzf bitcoin-pruned.tgz
 	rm bitcoin-pruned.tgz
-	#curl -L https://prunednode.today/latest.zip --output latest.zip
-    #unzip latest.zip -x bitcoin.conf 
-    #rm latest.zip
-    chown -R bitcoin:bitcoin *
+    # '*' misses dotfiles, and chown fails when not running as root -> don't abort
+    chown -R bitcoin:bitcoin . 2>/dev/null || true
     cd /home/bitcoin
 fi
 

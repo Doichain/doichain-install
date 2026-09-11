@@ -26,7 +26,7 @@ fi
 
 if [ -z ${RPC_PASSWORD} ]; then
 	#echo "generating password"
-	RPC_PASSWORD=$(xxd -l 30 -p /dev/urandom)
+	RPC_PASSWORD=$(openssl rand -hex 30)
 	echo "RPC_PASSWORD was not set, generated: "$RPC_PASSWORD
 fi
 
@@ -35,6 +35,7 @@ if [ -z ${DAPP_URL} ]; then
 fi
 
 DOICHAIN_CONF_FILE=/home/doichain/data/doichain/doichain.conf
+mkdir -p "$(dirname "$DOICHAIN_CONF_FILE")"
 if [ ! -f "$DOICHAIN_CONF_FILE" ]; then
 echo "DOICHAIN_CONF_FILE not found - generating new!"
 echo "
