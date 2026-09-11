@@ -90,6 +90,19 @@ services:
     volumes:
       - bitcoin-volume:/data/bitcoin
       - doichain-volume:/data/doichain
+      # The sharechain MUST persist. Without it, every restart makes p2pool pull a
+      # fresh ~17k-share chain from its peers and re-verify it at roughly 5 shares
+      # per minute -- about 29 hours on a 2-core host -- and it rejects every miner
+      # with "p2pool is downloading shares" for the whole time. With an empty data
+      # dir it serves work within seconds instead.
+      #
+      # Let compose create this volume; it then inherits /usr/src/p2pool/data from
+      # the image, which is owned by the unprivileged p2pool user (uid 1000). A
+      # volume created by hand beforehand can end up root-owned, in which case
+      # p2pool dies at startup with
+      #   OSError: [Errno 13] Permission denied: '/usr/src/p2pool/data/bitcoin'
+      # Fix by chowning it: docker run --rm -v p2pool-data:/d alpine chown -R 1000:1000 /d
+      - p2pool-data:/usr/src/p2pool/data
     environment:
       - P2POOL_DOICHAIN_DEFAULT_ADDR=${P2POOL_DOICHAIN_DEFAULT_ADDR}
       - P2POOL_BITCOIN_DEFAULT_ADDR=${P2POOL_BITCOIN_DEFAULT_ADDR}
@@ -105,6 +118,7 @@ volumes:
   bitcoin-volume:
   doichain-volume:
   dapp-volume:
+  p2pool-data:
 
 networks:
   static-network:
