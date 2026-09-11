@@ -35,8 +35,21 @@ USER doichain
 # Build Doichain Core with CMake (GUI/IPC/tests/bench/ZMQ off, SQLite wallet on),
 # install doichaind + doichain-cli, then drop the build tree to keep the image small.
 WORKDIR /home/doichain
-RUN git clone --branch "$DOICHAIN_VER" --depth 1 https://github.com/Doichain/doichain-core.git && \
+# DOICHAIN_VER may be a tag, a branch or a full commit SHA. Prefer a tag or a
+# SHA: Docker keys this layer's cache on the *string*, not on what it resolves
+# to, so rebuilding the same branch after new commits silently reuses the old
+# source tree. That produced an image that reported the right version and
+# contained the wrong seeds. The SHA is recorded in the image so the built
+# binary can always be traced back to a commit.
+RUN if git ls-remote --exit-code --heads --tags https://github.com/Doichain/doichain-core.git "$DOICHAIN_VER" >/dev/null 2>&1; then \
+      git clone --branch "$DOICHAIN_VER" --depth 1 https://github.com/Doichain/doichain-core.git; \
+    else \
+      mkdir doichain-core && cd doichain-core && git init -q && \
+      git remote add origin https://github.com/Doichain/doichain-core.git && \
+      git fetch -q --depth 1 origin "$DOICHAIN_VER" && git checkout -q FETCH_HEAD && cd ..; \
+    fi && \
     cd doichain-core && \
+    git rev-parse HEAD > /home/doichain/.source-commit && \
     cmake -B build -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_GUI=OFF -DENABLE_IPC=OFF -DBUILD_TESTS=OFF -DBUILD_BENCH=OFF \
       -DWITH_ZMQ=OFF -DENABLE_WALLET=ON && \
