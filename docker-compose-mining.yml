@@ -1,4 +1,11 @@
-version: '3.7'
+# Doichain mining stack: bitcoind (merge-mining parent), doichaind, p2pool and
+# ElectrumX. Secrets come from .env (see .env.mining.example); nothing below has
+# a usable default password.
+#
+# RPC ports are deliberately NOT published. p2pool and ElectrumX reach the
+# daemons over the compose network (172.21.0.0/16), and a published RPC port --
+# doichaind has a wallet behind it -- would be an open door. Only the P2P ports,
+# the p2pool port and ElectrumX's client ports face the outside.
 
 services:
   bitcoin-init:
@@ -34,17 +41,18 @@ services:
     image: "doichain/bitcoind:v0.20.0"
     container_name: bitcoin
     hostname: bitcoin
+    restart: unless-stopped
     depends_on:
       bitcoin-init:
         condition: service_completed_successfully
     ports:
-      - "8332:8332"
-      - "8333:8333"
+      - "8333:8333"   # P2P only; RPC (8332) stays on the compose network
     volumes:
      - bitcoin-volume:/home/bitcoin/data
     environment:
-      - RPC_PASSWORD=password
-      - RPC_ALLOW_IP=0.0.0.0/0 #::/0
+      # Written into bitcoin.conf on the FIRST start only (see bitcoin/entrypoint.sh).
+      - RPC_PASSWORD=${BITCOIN_RPC_PASSWORD:?set BITCOIN_RPC_PASSWORD in .env}
+      - RPC_ALLOW_IP=172.21.0.0/16
     stdin_open: true
     tty: true
     networks:
@@ -52,11 +60,10 @@ services:
         ipv4_address: 172.21.0.5
 
   doichain:
-   build:
-     context: ./doichain
-     args:
-       DOICHAIN_VER: "v31.1.3"   # release tag
-   image: "doichain/core:v31.1.3"
+   # Pulled from Docker Hub: built from the signed tag v31.1.5 (commit 6b95bf8412),
+   # the release whose binaries run on the fleet. To build it yourself instead:
+   #   docker build --build-arg DOICHAIN_VER=v31.1.5 -t doichain/core:v31.1.5 ./doichain
+   image: "doichain/core:v31.1.5"
    container_name: doichain
    hostname: doichain
    # The node is useless to the network if it cannot be reached: without an
@@ -67,28 +74,25 @@ services:
    restart: unless-stopped
    ports:
      - "8338:8338"   # P2P - required, see bind= in the generated conf
-     - "8339:8339"   # RPC
    volumes:
      - doichain-volume:/home/doichain/data
    environment:
-     - RPC_PASSWORD=password
-     - RPC_ALLOW_IP=0.0.0.0/0 #::/0
+     # Written into doichain.conf on the FIRST start only (see doichain/entrypoint.sh).
+     - RPC_PASSWORD=${DOICHAIN_RPC_PASSWORD:?set DOICHAIN_RPC_PASSWORD in .env}
+     - RPC_ALLOW_IP=172.21.0.0/16
      # Set this to the host's public address on any node that should be
      # reachable. Publishing 8338 above is necessary but not sufficient: Core
      # derives the address it advertises from the local interfaces, which in a
      # container means a private 172.x it will never announce. Without this the
      # node happily accepts inbound connections while telling nobody it exists,
      # so no peer gossips it and no DNS seeder ever finds it.
-     #- EXTERNAL_IP=203.0.113.10
-     # Bootstrap belt-and-braces. As of v31.1.3 the binary ships real fixed
-     # seeds, and dnsseed.doichain.org is healthy (18 addresses, all answering
-     # on 8338 when last checked). But both of those find the *old* chain: none
-     # of those peers follow DigiShield yet. Until a second DigiShield node is
-     # reachable, an explicit peer list is what keeps a fresh node from syncing
-     # to 431016 and stopping there.
-     # seed.doi.works is in chainparams but has no NS record at all -- the zone
-     # was never delegated. See https://github.com/Doichain/doichain-install/issues/3
-     - DOICHAIN_EXTRA_ARGS=-addnode=2.28.75.43 -addnode=136.243.155.62 -addnode=116.203.99.217 -addnode=128.140.44.20 -addnode=195.201.129.97 -addnode=94.130.57.196
+     - EXTERNAL_IP=${EXTERNAL_IP:-}
+     # Peer discovery needs no help any more: v31.1.4 and later ship fixed seeds
+     # that all follow DigiShield, dnsseed.doichain.org hands out DigiShield
+     # nodes, and v31.1.5 fixed the header sync that kept a fresh node from
+     # finishing (it now has all headers within minutes). Extra arguments such
+     # as -addnode=<host> can still be passed from .env.
+     - DOICHAIN_EXTRA_ARGS=${DOICHAIN_EXTRA_ARGS:-}
    stdin_open: true
    tty: true
    networks:
@@ -97,15 +101,20 @@ services:
 
   p2pool:
     image: "doichain/p2pool:v34.0"
-    container_name: p2pool 
+    container_name: p2pool
     hostname: p2pool
+    restart: unless-stopped
+    depends_on:
+      - bitcoin
+      - doichain
     stdin_open: true
     tty: true
-    ports: 
+    ports:
       - "9332:9332"
     volumes:
+      # p2pool reads bitcoind's RPC credentials from bitcoin.conf, through the
+      # image's ~/.bitcoin -> /data/bitcoin/bitcoin symlink.
       - bitcoin-volume:/data/bitcoin
-      - doichain-volume:/data/doichain
       # The sharechain MUST persist. Without it, every restart makes p2pool pull a
       # fresh ~17k-share chain from its peers and re-verify it at roughly 5 shares
       # per minute -- about 29 hours on a 2-core host -- and it rejects every miner
@@ -119,22 +128,63 @@ services:
       #   OSError: [Errno 13] Permission denied: '/usr/src/p2pool/data/bitcoin'
       # Fix by chowning it: docker run --rm -v p2pool-data:/d alpine chown -R 1000:1000 /d
       - p2pool-data:/usr/src/p2pool/data
+      # The published v34.0 image (2022) predates the fixed start.sh: it bakes
+      # the merged-mining URL in at build time, so DOICHAIN_RPC_* -- and any
+      # password other than "password" -- never reached p2pool. Mount the
+      # repository's version, which composes the URL at runtime.
+      - ./p2pool/start.sh:/start.sh:ro
     environment:
       - P2POOL_DOICHAIN_DEFAULT_ADDR=${P2POOL_DOICHAIN_DEFAULT_ADDR}
       - P2POOL_BITCOIN_DEFAULT_ADDR=${P2POOL_BITCOIN_DEFAULT_ADDR}
       - DOICHAIN_RPC_USER=admin
-      - DOICHAIN_RPC_PASSWORD=password
+      - DOICHAIN_RPC_PASSWORD=${DOICHAIN_RPC_PASSWORD:?set DOICHAIN_RPC_PASSWORD in .env}
       - DOICHAIN_RPC_HOST=doichain
       - DOICHAIN_RPC_PORT=8339
     networks:
       static-network:
         ipv4_address: 172.21.0.8
 
+  electrumx:
+    # ElectrumX for Electrum wallets (Doichain/electrumx, ElectrumX 1.15.0 with
+    # the Doichain coin class). It indexes what doichaind serves -- from empty
+    # volumes, node and index were complete after ~25 minutes in our test -- and
+    # does no consensus validation of its own.
+    build:
+      context: ./electrumx
+      additional_contexts:
+        electrumx-src: "https://github.com/Doichain/electrumx.git#94d109070bc32118ca6e54182a4a2a94568c68ee"
+      args:
+        ELECTRUMX_REF: "94d109070bc32118ca6e54182a4a2a94568c68ee"
+    image: "doichain/electrumx:v1.15.0-doi1"
+    container_name: electrumx
+    hostname: electrumx
+    restart: unless-stopped
+    depends_on:
+      - doichain
+    ports:
+      - "50001:50001"   # TCP
+      - "50002:50002"   # SSL
+      - "50004:50004"   # WSS
+    volumes:
+      - electrumx-db:/data
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    environment:
+      # The explicit :8339 matters: the coin class defaults to 8338, the P2P port.
+      - DAEMON_URL=http://admin:${DOICHAIN_RPC_PASSWORD:?set DOICHAIN_RPC_PASSWORD in .env}@doichain:8339/
+      - REPORT_HOST=${ELECTRUMX_REPORT_HOST:-}
+    networks:
+      static-network:
+        ipv4_address: 172.21.0.9
+
 volumes:
   bitcoin-volume:
   doichain-volume:
   dapp-volume:
   p2pool-data:
+  electrumx-db:
 
 networks:
   static-network:
