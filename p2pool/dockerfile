@@ -5,9 +5,12 @@ ENV DOICHAIN_RPC_PASSWORD "password"
 ENV DOICHAIN_RPC_HOST "doichain"
 ENV DOICHAIN_RPC_PORT "8339"
 
-ENV MERGED_MINGIN_URL "http://$DOICHAIN_RPC_USER:$DOICHAIN_RPC_PASSWORD@${DOICHAIN_RPC_HOST}:${DOICHAIN_RPC_PORT}"
-ENV P2POOL_DOICHAIN_DEFAULT_ADDR = ""
-ENV P2POOL_BITCOIN_DEFAULT_ADDR = ""
+# NOTE: MERGED_MINGIN_URL is deliberately NOT baked in here -- ENV would
+# interpolate DOICHAIN_RPC_* at build time, ignoring runtime overrides.
+# start.sh composes it at runtime instead.
+# `ENV KEY = ""` (spaces around =) set the value to the literal `= ""`.
+ENV P2POOL_DOICHAIN_DEFAULT_ADDR ""
+ENV P2POOL_BITCOIN_DEFAULT_ADDR ""
 COPY start.sh start.sh
 RUN adduser --disabled-password --gecos '' p2pool && \
 	adduser p2pool sudo && \

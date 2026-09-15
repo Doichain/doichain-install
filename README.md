@@ -4,30 +4,35 @@ This repository provides the necessary Docker Compose file, Dockerfiles and/or i
 - Doichain Core Node
 - P2Pool (P2P Merge Mining Pool to merge mine Bitcoin and Doichain)
 - Bitcoin Core Node (pruned) dependency to merge mine Doichain via P2Pool
+- ElectrumX Server (for Electrum wallets)
 - Doichain dApp (for Email Marketing)
 - MongoDB (dependency for Doichain dApp)
-- (planned) ElectrumX Server
 - (planned) Mail Server (dependency for Doichain dApp)
 
 ## Prerequisite 
 1. [Docker](https://docs.docker.com/engine/install/): version 16 or higher 
-2. [Docker-Compose](https://docs.docker.com/compose/install/): verison ~1.27 or higher 
+2. [Docker Compose v2](https://docs.docker.com/compose/install/) (`docker compose`), 2.17 or higher -- the ElectrumX service uses `additional_contexts`
 
 ## Usage for p2pool mining DOI and BTC 
 1. Clone this repo.
-2. Run ```cp .env.mining.example .env``` and edit .env in order to tell P2pool where to mine coins. 
+2. Run ```cp .env.mining.example .env``` and edit .env:
         - P2POOL_DOICHAIN_DEFAULT_ADDR and 
-        - P2POOL_BITCOIN_DEFAULT_ADDR  
-3. Run ```docker-compose -f docker-compose-mining.yml up -d``` in order to start a Doichain mining environment
-4. Run ```docker-compose down``` in order to stop the Doichain Node environment
+        - P2POOL_BITCOIN_DEFAULT_ADDR (where P2pool mines coins to)
+        - DOICHAIN_RPC_PASSWORD and BITCOIN_RPC_PASSWORD (required, e.g. ```openssl rand -hex 32```)
+        - EXTERNAL_IP (the public address of this host)
+3. Run ```docker compose -f docker-compose-mining.yml up -d``` in order to start a Doichain mining environment. Doichain Core is pulled from Docker Hub as `doichain/core:v31.1.5`.
+4. Run ```docker compose -f docker-compose-mining.yml down``` in order to stop the Doichain Node environment
+
+See [UPGRADE-31.1.md](UPGRADE-31.1.md) for the current state of the 31.1 stack.
 
 ***Remark***
-When starting ```docker-compose -f docker-compose-mining.yml up -d``` the bitcoin service downloads a pruned Bitcoin blockchain. This takes a while. It will be extracted into the Bitcoin Docker container. The p2pool service is then showing errors in the logs, it can't connect to bitcoin rpc! (see: ```docker compose exec p2pool tail -f /home/p2pool/nohup.out```) 
+When starting ```docker compose -f docker-compose-mining.yml up -d``` the bitcoin service downloads a pruned Bitcoin blockchain. This takes a while. It will be extracted into the Bitcoin Docker container. The p2pool service is then showing errors in the logs, it can't connect to bitcoin rpc! (see: ```docker compose -f docker-compose-mining.yml logs -f p2pool```)
 1. You can connect to the bitcoin container with ```docker compose exec bitcoin bash``` and ```cd .bitcoin``` and check if the blockchain was downloaded completely and all blocks synchronized.
 2. If the blockchain was downloaded it will sync the missing blocks. You can watch the process via ```docker compose exec bitcoin tail -f /home/bitcoin/.bitcoin/debug.log```
 3. As soon as p2pool, bitcoind and doichaind service is running, p2pool mining pool can be access via the ip of the node and port 9332!
-4. Bitcoind rpc running on standard port 8332 (Bitcoin p2p on default 8333)
-5. Doichain rpc running on standard port 8338 (Docihain p2p on default 8339)
+4. Bitcoind: P2P on port 8333 (published); RPC on 8332 stays inside the compose network
+5. Doichain: P2P on port 8338 (published); RPC on 8339 stays inside the compose network
+6. ElectrumX: TCP 50001, SSL 50002, WSS 50004. It indexes while doichaind syncs; from empty volumes both were complete after about 25 minutes in our test. Check it with ```docker exec electrumx electrumx_rpc getinfo```.
 
 ## Usage for Email Double Opt-In request server (you want a Double Opt-In) for your customers or email partners
 1. Clone this repo or download this file.
@@ -78,7 +83,7 @@ When starting ```docker-compose -f docker-compose-mining.yml up -d``` the bitcoi
 
 ## Basics to navigate with Doichain P2Pool and Doichain Bitcoind
 1. When starting Bitcoind first time, it downloads a pruned Bitcoin blockchain and starts syncing the last couple of blocks - please be patients and have a look on the following logs.
-2. Check p2pool log ```docker compose exec p2pool tail -f /home/p2pool/nohup.out```
+2. Check p2pool log ```docker compose -f docker-compose-mining.yml logs -f p2pool```
     - is p2pool connected to bitcoin? Or still showing "Bitcoin Core is in initial sync and waiting for blocks..."
 3. Check bitcoind log ```docker compose exec bitcoin tail -f /home/bitcoin/.bitcoin/debug.log``` 
 
