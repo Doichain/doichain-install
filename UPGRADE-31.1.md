@@ -1,6 +1,113 @@
 # Upgrade to Doichain Core 31.1 (branch `feat/doichain-31.1`)
 
 Goal: run the new Doichain Core **31.1** (nc31.1 / Bitcoin Core 31 base, with the
+DigiShield fast-DAA hard fork) together with p2pool and ElectrumX on a fresh
+host, instead of the legacy 0.20 images this repo shipped.
+
+## Status 2026-09-13: v31.1.5
+
+- **Doichain Core v31.1.5 is released**: signed tag on `doichain-core`, a GitHub
+  release with static Linux binaries, and **`doichain/core:v31.1.5` on Docker
+  Hub** (also `latest`). The compose file **pulls** that image; nothing is built
+  from source any more.
+- **Fresh nodes join on their own.** v31.1.4 ships fixed seeds that all follow
+  DigiShield, `dnsseed.doichain.org` hands out DigiShield nodes, and v31.1.5 fixed
+  the last header-sync bug: a node with an empty datadir had all headers after
+  120 s and every block after 240 s on a Linux server. This compose stack, from
+  empty volumes on a desktop Mac: headers at the tip after ~8 minutes, every block
+  after ~22 minutes, same tip hash as our nodes. No `-addnode` list needed.
+- **p2pool merge-mines against v31.1.5 unchanged**: `createauxblock` on a v31.1.5
+  node returns exactly the fields p2pool consumes (`hash`, `chainid`, `bits`,
+  `coinbasevalue`, `_target`, `height`, `previousblockhash`). Checked from inside
+  the compose network with p2pool's own RPC client and the URL `start.sh` builds;
+  the AuxPoW functional tests pass on v31.1.5.
+- **ElectrumX is a new service**, see below.
+- **RPC is no longer exposed.** This file used to publish 8339 (doichaind, with a
+  wallet behind it) and 8332 (bitcoind) on all interfaces, with the password
+  `password` and `rpcallowip=0.0.0.0/0`. Both now stay on the compose network,
+  and both passwords are required in `.env`.
+
+## Run
+
+```bash
+git clone -b feat/doichain-31.1 https://github.com/Doichain/doichain-install.git
+cd doichain-install
+cp .env.mining.example .env
+# set your payout addresses and both RPC passwords (openssl rand -hex 32)
+docker compose -f docker-compose-mining.yml up -d
+```
+
+Ports facing the outside: `8338` (Doichain P2P), `8333` (Bitcoin P2P), `9332`
+(p2pool), `50001`/`50002`/`50004` (ElectrumX TCP/SSL/WSS). Set `EXTERNAL_IP` to
+the host's public address, or the node never advertises itself.
+
+The RPC passwords are written into `doichain.conf` / `bitcoin.conf` on the
+**first** start only. A host that already has volumes from an older version keeps
+its old conf -- including an old `rpcallowip=0.0.0.0/0` -- until you edit it
+there.
+
+## ElectrumX
+
+Service `electrumx`, image `doichain/electrumx:v1.15.0-doi1`, built from
+`Doichain/electrumx` @ `94d10907` (ElectrumX 1.15.0 with the Doichain coin
+class: AuxPoW + SegWit deserializer, name index including `name_doi`). It is the
+code the fleet's ElectrumX servers run: the package installed on the canary
+hashes identically, and there it indexes v31.1.5 live, database height equal to
+node height, including a `name_doi` in block 431,320.
+
+- It trusts `doichaind` and does no consensus validation of its own, so the fork
+  needs no change in ElectrumX.
+- `DAEMON_URL` must carry the port `:8339`: the coin class still defaults to 8338,
+  which is the P2P port. The entrypoint refuses to start without it.
+- It indexes while `doichaind` syncs. From empty volumes, the node had every
+  block after ~22 minutes and the index was complete two minutes later (Docker
+  Desktop on a Mac). Clients see the server once it has caught up.
+- Index status: `docker exec electrumx electrumx_rpc getinfo` (`db height` against
+  `daemon height`). The admin RPC listens on localhost inside the container only.
+- SSL and WSS use a self-signed certificate generated on first start; mount a real
+  one at `SSL_CERTFILE` / `SSL_KEYFILE` for public use.
+- `Doichain/electrumx` is a private repository. Compose pulls
+  `doichain/electrumx:v1.15.0-doi1` from Docker Hub first and falls back to the
+  `build:` section only when the pull fails -- and that build needs access to the
+  repository.
+- The session cost limits (`COST_SOFT_LIMIT` / `COST_HARD_LIMIT`) keep ElectrumX's
+  defaults, which throttle and then disconnect a client that keeps the server
+  busy. Do not set them to 0 on a public server: that turns the protection off.
+
+## Open issues
+
+- [ ] The generated `doichain.conf` still sets `rpcallowip=0.0.0.0/0` in its
+  `[test]` and `[regtest]` sections (the image's entrypoint writes them). Mainnet
+  uses the compose subnet, and no RPC port is published on any network.
+- [ ] ElectrumX 1.15.0 pins aiorpcX below 0.19, and the image runs it on Python
+  3.9, which is past end of life. A maintained ElectrumX needs the Doichain coin
+  class ported forward.
+
+- [ ] `doichain/bitcoind:v0.20.0` on Docker Hub still carries the dead
+  `prunednode.today` URL; the `bitcoin-init` service works around it.
+  Republishing it, and choosing a modern bitcoind (#1), is open.
+- [ ] `doichain/p2pool:v34.0` on Docker Hub (2022) predates the fixed `start.sh`;
+  the compose file mounts the repository's version over it. Republishing the
+  image would make the mount unnecessary.
+- [ ] `UA_NAME` is still `"Satoshi"` (the node advertises `/Satoshi:31.1.5/`).
+- [ ] ElectrumX: `TX_COUNT` / `TX_PER_BLOCK` are placeholders and `PEERS` is empty
+  (#2); harmless for indexing.
+- [x] Peer discovery for fresh nodes: fixed seeds (v31.1.4), header sync (v31.1.5),
+  DNS seeder.
+- [x] `wallet=1` in the generated conf: dropped.
+- [x] Publish `doichain/core`: `v31.1.5` on Docker Hub.
+- [x] ElectrumX service: added.
+- [x] Testnet port collision: the generated `bind=` uses the active network's port.
+
+---
+
+# History (2026-09-11)
+
+The sections below record the relaunch as it happened. Version numbers, peer
+lists, the run instructions and the "open" items in them are superseded by the
+sections above.
+
+Goal: run the new Doichain Core **31.1** (nc31.1 / Bitcoin Core 31 base, with the
 DigiShield fast‑DAA hard fork) together with p2pool on a fresh host (e.g. Hetzner),
 instead of the legacy 0.20 images this repo shipped.
 
@@ -231,5 +338,7 @@ docker compose -f docker-compose-mining.yml up -d
 # p2pool UI on :9332, doichaind RPC on :8339
 ```
 
-Until the DNS seeds are fixed, add known peers to the `doichain` service, e.g.
-`-addnode=2.28.75.43 -addnode=136.243.155.62`.
+**Superseded (2026-09-13): do not follow this block.** It builds the image from
+source, and the two peers once recommended here (`2.28.75.43`,
+`136.243.155.62`) stall one block below the fork. Use the *Run* section at the
+top.
