@@ -147,8 +147,8 @@ services:
   electrumx:
     # ElectrumX for Electrum wallets (Doichain/electrumx, upstream 2.0.0 with the
     # Doichain coin classes). It indexes what doichaind serves -- from empty
-    # volumes, node and index were complete after ~25 minutes in our test -- and
-    # does no consensus validation of its own.
+    # volumes the index was complete after ~22 minutes in our test -- and does no
+    # consensus validation of its own.
     #
     # Coming from the 1.15 image: 2.0 changed the on-disk schema and has no
     # migration path, so the electrumx-db volume has to start empty
@@ -157,9 +157,12 @@ services:
     build:
       context: ./electrumx
       additional_contexts:
-        electrumx-src: "https://github.com/Doichain/electrumx.git#9afddfecb93254d65a5c1230d9a9a4e68decff8e"
+        # Doichain/electrumx tag v2.0.0-doi1 (signed), commit 11877d7b.
+        # Pinned by commit rather than by the tag name: a tag can be moved, a
+        # commit cannot, and this one is reachable from master.
+        electrumx-src: "https://github.com/Doichain/electrumx.git#11877d7b06f269cf3f120b2d3098018602089d82"
       args:
-        ELECTRUMX_REF: "9afddfecb93254d65a5c1230d9a9a4e68decff8e"
+        ELECTRUMX_REF: "11877d7b06f269cf3f120b2d3098018602089d82"
     image: "doichain/electrumx:v2.0.0-doi1"
     container_name: electrumx
     hostname: electrumx
