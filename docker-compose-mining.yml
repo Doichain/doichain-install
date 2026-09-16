@@ -145,17 +145,22 @@ services:
         ipv4_address: 172.21.0.8
 
   electrumx:
-    # ElectrumX for Electrum wallets (Doichain/electrumx, ElectrumX 1.15.0 with
-    # the Doichain coin class). It indexes what doichaind serves -- from empty
+    # ElectrumX for Electrum wallets (Doichain/electrumx, upstream 2.0.0 with the
+    # Doichain coin classes). It indexes what doichaind serves -- from empty
     # volumes, node and index were complete after ~25 minutes in our test -- and
     # does no consensus validation of its own.
+    #
+    # Coming from the 1.15 image: 2.0 changed the on-disk schema and has no
+    # migration path, so the electrumx-db volume has to start empty
+    # (docker volume rm ...-electrumx-db). Nothing else in the stack is affected;
+    # Electrum wallets are not, because 2.0 still serves protocol 1.4.
     build:
       context: ./electrumx
       additional_contexts:
-        electrumx-src: "https://github.com/Doichain/electrumx.git#94d109070bc32118ca6e54182a4a2a94568c68ee"
+        electrumx-src: "https://github.com/Doichain/electrumx.git#9afddfecb93254d65a5c1230d9a9a4e68decff8e"
       args:
-        ELECTRUMX_REF: "94d109070bc32118ca6e54182a4a2a94568c68ee"
-    image: "doichain/electrumx:v1.15.0-doi1"
+        ELECTRUMX_REF: "9afddfecb93254d65a5c1230d9a9a4e68decff8e"
+    image: "doichain/electrumx:v2.0.0-doi1"
     container_name: electrumx
     hostname: electrumx
     restart: unless-stopped
@@ -172,7 +177,9 @@ services:
         soft: 65536
         hard: 65536
     environment:
-      # The explicit :8339 matters: the coin class defaults to 8338, the P2P port.
+      # The coin class now defaults to 8339 itself; the explicit port stays
+      # because the entrypoint refuses a DAEMON_URL without one, which keeps a
+      # hand-written URL from silently reaching the P2P socket (8338).
       - DAEMON_URL=http://admin:${DOICHAIN_RPC_PASSWORD:?set DOICHAIN_RPC_PASSWORD in .env}@doichain:8339/
       - REPORT_HOST=${ELECTRUMX_REPORT_HOST:-}
     networks:

@@ -48,28 +48,32 @@ there.
 
 ## ElectrumX
 
-Service `electrumx`, image `doichain/electrumx:v1.15.0-doi1`, built from
-`Doichain/electrumx` @ `94d10907` (ElectrumX 1.15.0 with the Doichain coin
-class: AuxPoW + SegWit deserializer, name index including `name_doi`). It is the
-code the fleet's ElectrumX servers run: the package installed on the canary
-hashes identically, and there it indexes v31.1.5 live, database height equal to
-node height, including a `name_doi` in block 431,320.
+Service `electrumx`, image `doichain/electrumx:v2.0.0-doi1`, built from
+`Doichain/electrumx` @ `9afddfe` (upstream **ElectrumX 2.0.0** with the Doichain
+coin classes: AuxPoW + SegWit deserializer, name index including `name_doi`).
 
 - It trusts `doichaind` and does no consensus validation of its own, so the fork
   needs no change in ElectrumX.
-- `DAEMON_URL` must carry the port `:8339`: the coin class still defaults to 8338,
-  which is the P2P port. The entrypoint refuses to start without it.
-- It indexes while `doichaind` syncs. From empty volumes, the node had every
-  block after ~22 minutes and the index was complete two minutes later (Docker
-  Desktop on a Mac). Clients see the server once it has caught up.
+- **Coming from the 1.15 image, the database has to be rebuilt.** 2.0 changed the
+  on-disk schema and ships no migration path, so `electrumx-db` must start empty.
+  On this chain that is cheap: from empty volumes, the node had every block after
+  ~22 minutes and the index was complete two minutes later (Docker Desktop on a
+  Mac).
+- `DB_ENGINE` is mandatory since 2.0; the image sets `rocksdb`, which syncs
+  roughly 25 % faster than LevelDB on an SSD.
+- **Electrum wallets are unaffected**: 2.0 still serves `PROTOCOL_MIN = (1, 4)`,
+  and Electrum-DOI speaks 1.4.
+- `DAEMON_URL` carries the port `:8339`. The coin class now defaults to 8339
+  itself, but the entrypoint still refuses a URL without an explicit port, so a
+  hand-written one cannot reach the P2P socket (8338) unnoticed.
 - Index status: `docker exec electrumx electrumx_rpc getinfo` (`db height` against
   `daemon height`). The admin RPC listens on localhost inside the container only.
 - SSL and WSS use a self-signed certificate generated on first start; mount a real
   one at `SSL_CERTFILE` / `SSL_KEYFILE` for public use.
-- `Doichain/electrumx` is a private repository. Compose pulls
-  `doichain/electrumx:v1.15.0-doi1` from Docker Hub first and falls back to the
-  `build:` section only when the pull fails -- and that build needs access to the
-  repository.
+- `Doichain/electrumx` is **public** since 2026-09-16, so `docker compose build`
+  works on any host. Compose still pulls `doichain/electrumx:v2.0.0-doi1` from
+  Docker Hub first and falls back to the `build:` section only when the pull
+  fails.
 - The session cost limits (`COST_SOFT_LIMIT` / `COST_HARD_LIMIT`) keep ElectrumX's
   defaults, which throttle and then disconnect a client that keeps the server
   busy. Do not set them to 0 on a public server: that turns the protection off.
@@ -79,9 +83,9 @@ node height, including a `name_doi` in block 431,320.
 - [ ] The generated `doichain.conf` still sets `rpcallowip=0.0.0.0/0` in its
   `[test]` and `[regtest]` sections (the image's entrypoint writes them). Mainnet
   uses the compose subnet, and no RPC port is published on any network.
-- [ ] ElectrumX 1.15.0 pins aiorpcX below 0.19, and the image runs it on Python
-  3.9, which is past end of life. A maintained ElectrumX needs the Doichain coin
-  class ported forward.
+- [x] ElectrumX runtime age: the coin classes are ported to upstream 2.0.0
+  (Doichain/electrumx#10), the image runs Python 3.14 with aiorpcX 0.25, and the
+  yearly "DB::flush_count overflow" compaction is gone with the new schema.
 
 - [ ] `doichain/bitcoind:v0.20.0` on Docker Hub still carries the dead
   `prunednode.today` URL; the `bitcoin-init` service works around it.
@@ -90,8 +94,9 @@ node height, including a `name_doi` in block 431,320.
   the compose file mounts the repository's version over it. Republishing the
   image would make the mount unnecessary.
 - [ ] `UA_NAME` is still `"Satoshi"` (the node advertises `/Satoshi:31.1.5/`).
-- [ ] ElectrumX: `TX_COUNT` / `TX_PER_BLOCK` are placeholders and `PEERS` is empty
-  (#2); harmless for indexing.
+- [x] ElectrumX: `TX_COUNT` / `TX_PER_BLOCK` carry real values since the 2.0 port
+  (2,742,220 at height 431,763, from `getchaintxstats`). `PEERS` stays empty on
+  purpose -- the servers neither announce nor discover each other.
 - [x] Peer discovery for fresh nodes: fixed seeds (v31.1.4), header sync (v31.1.5),
   DNS seeder.
 - [x] `wallet=1` in the generated conf: dropped.
