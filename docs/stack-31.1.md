@@ -53,8 +53,10 @@ there.
 ## ElectrumX
 
 Service `electrumx`, image `doichain/electrumx:v2.0.0-doi1`, built from
-`Doichain/electrumx` @ `9afddfe` (upstream **ElectrumX 2.0.0** with the Doichain
-coin classes: AuxPoW + SegWit deserializer, name index including `name_doi`).
+`Doichain/electrumx` at the signed tag **`v2.0.0-doi1`** (commit `11877d7b`) --
+upstream **ElectrumX 2.0.0** with the Doichain coin classes: AuxPoW + SegWit
+deserializer, name index including `name_doi`. The compose file pins the commit
+rather than the tag name, because a tag can be moved and a commit cannot.
 
 - It trusts `doichaind` and does no consensus validation of its own, so the fork
   needs no change in ElectrumX.
