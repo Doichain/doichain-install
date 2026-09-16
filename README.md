@@ -1,92 +1,154 @@
-# Doichain Environment via Docker Compose 
+# Doichain environment via Docker Compose
 
-This repository provides the necessary Docker Compose file, Dockerfiles and/or images to start a complete Doichain Node environment including:
-- Doichain Core Node
-- P2Pool (P2P Merge Mining Pool to merge mine Bitcoin and Doichain)
-- Bitcoin Core Node (pruned) dependency to merge mine Doichain via P2Pool
-- ElectrumX Server (for Electrum wallets)
-- Doichain dApp (for Email Marketing)
-- MongoDB (dependency for Doichain dApp)
-- (planned) Mail Server (dependency for Doichain dApp)
+Compose files, Dockerfiles and images to run a Doichain environment: a Doichain
+Core node on its own, merge mining with p2pool, an ElectrumX server for Electrum
+wallets, and the Doichain dApp for email Double Opt-In.
 
-## Prerequisite 
-1. [Docker](https://docs.docker.com/engine/install/): version 16 or higher 
-2. [Docker Compose v2](https://docs.docker.com/compose/install/) (`docker compose`), 2.17 or higher -- the ElectrumX service uses `additional_contexts`
+All nodes here run **Doichain Core 31.1**, the rules the network has followed
+since the DigiShield fork at block 431,017.
 
-## Usage for p2pool mining DOI and BTC 
-1. Clone this repo.
-2. Run ```cp .env.mining.example .env``` and edit .env:
-        - P2POOL_DOICHAIN_DEFAULT_ADDR and 
-        - P2POOL_BITCOIN_DEFAULT_ADDR (where P2pool mines coins to)
-        - DOICHAIN_RPC_PASSWORD and BITCOIN_RPC_PASSWORD (required, e.g. ```openssl rand -hex 32```)
-        - EXTERNAL_IP (the public address of this host)
-3. Run ```docker compose -f docker-compose-mining.yml up -d``` in order to start a Doichain mining environment. Doichain Core is pulled from Docker Hub as `doichain/core:v31.1.5`.
-4. Run ```docker compose -f docker-compose-mining.yml down``` in order to stop the Doichain Node environment
+## Which stack do you want?
 
-See [UPGRADE-31.1.md](UPGRADE-31.1.md) for the current state of the 31.1 stack.
+| Compose file | What it starts | Use it for |
+|---|---|---|
+| `docker-compose-mining.yml` | bitcoind (pruned), Doichain Core, p2pool, ElectrumX | merge mining DOI + BTC, and serving Electrum wallets |
+| `docker-compose-email-doi-mainnet.yml` | nginx + certbot, Doichain Core, dApp, MongoDB | running a Double Opt-In server on mainnet |
+| `docker-compose-email-doi-testnet.yml` | the same, on testnet | trying the dApp without real coins |
 
-***Remark***
-When starting ```docker compose -f docker-compose-mining.yml up -d``` the bitcoin service downloads a pruned Bitcoin blockchain. This takes a while. It will be extracted into the Bitcoin Docker container. The p2pool service is then showing errors in the logs, it can't connect to bitcoin rpc! (see: ```docker compose -f docker-compose-mining.yml logs -f p2pool```)
-1. You can connect to the bitcoin container with ```docker compose exec bitcoin bash``` and ```cd .bitcoin``` and check if the blockchain was downloaded completely and all blocks synchronized.
-2. If the blockchain was downloaded it will sync the missing blocks. You can watch the process via ```docker compose exec bitcoin tail -f /home/bitcoin/.bitcoin/debug.log```
-3. As soon as p2pool, bitcoind and doichaind service is running, p2pool mining pool can be access via the ip of the node and port 9332!
-4. Bitcoind: P2P on port 8333 (published); RPC on 8332 stays inside the compose network
-5. Doichain: P2P on port 8338 (published); RPC on 8339 stays inside the compose network
-6. ElectrumX: TCP 50001, SSL 50002, WSS 50004. It indexes while doichaind syncs; from empty volumes both were complete after about 25 minutes in our test. Check it with ```docker exec electrumx electrumx_rpc getinfo```.
+## Prerequisites
 
-## Usage for Email Double Opt-In request server (you want a Double Opt-In) for your customers or email partners
-1. Clone this repo or download this file.
-2. Run ```cp .env.mining.example .env``` and edit .env accordingly
+- **Docker Engine** 20.10 or newer
+- **Docker Compose v2** (`docker compose`, not `docker-compose`), **2.17 or
+  newer** — the ElectrumX service uses `additional_contexts`
 
-## Usage for Email Double-Opt validator (you validate your own DOIs of your own email domains)
-1. Clone this repo
-2. Run ```cp .env.email-doi.example .env``` and edit .env accordingly
-    - SERVER_NAME=public server name and domain (e.g. doichain.your-company.com)
-    - RPC_USER=admin
-    - RPC_PASSWORD=password (please change)
-    - DAPP_SMTP_HOST=your smtp server (e.g. google mail)
-    - DAPP_SMTP_USER=your smtp user (e.g. google username)
-    - DAPP_SMTP_PASS=your smtp password 
-    - DAPP_SMTP_PORT=your smtp port (e.g. 25,587)
-    - DAPP_SMTP_DEFAULT_FROM=the email address which is going to be used when sending Double Opt-In confirmation email to your email ussers
-3. Run ```docker-compose -f docker-compose-email-doi-mainnet.yml up -d``` in order to start the Doichain mainnet environment or 
-4. Run ```docker-compose -f docker-compose-email-doi-testnet.yml up -d``` in order to start the Doichain testnet environment 
-5. Run ```docker-compose down -f docker-compose-email-doi-mainnet.yml``` or  ```docker-compose down -f docker-compose-email-doi-testnet.yml``` in order to stop the Doichain Node environment
-6. Run ```./init-letsencrypt.sh``` in order to replace the generated self signed ssl cert wih a certificate signed by letsencrypt.
-7. Consult Doichain dApp RPC-API on how to:
-    - authenticate https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md#authentication
-    - request a doi https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md#create-opt-in
-    - add another user / project https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md#create-user
-    - add / update a user / project with special template, sender name, subject requirements  
+## Mining stack
 
+```bash
+cp .env.mining.example .env
+```
 
-## General examples  
-### Basics to navigate with Doichain and Docker compose
-- show running containers: ```docker-compose ps```
-- show all logs of running containers ```docker-compose logs``` 
-- connect to a container ```docker-compose exec <containerId> bash``` (or command)
+Then edit `.env`:
 
-### Basics to navigate on Doichain Node
-1. Connect to Doichain Container via ```docker-compose exec doichain bash````
-2. Inside of the container you can use the doichain-cli commands such as:
-    - doichain-cli help
-    - doichain-cli getblockchaininfo
-    - doichain-cli getpeerinfo
-    - doichain-cli createwallet
-    - doichain-cli getbalance
-    - doichain-cli getnewaddress
-    - doichain-cli getbalance
-    - doichain-cli listtransactions
-    - doichain-cli gettransaction
-    - doichain-cli getrawtransaction
-    - doichain-cli getrawmempool
+| Variable | Meaning |
+|---|---|
+| `P2POOL_DOICHAIN_DEFAULT_ADDR` | where p2pool pays out your DOI |
+| `P2POOL_BITCOIN_DEFAULT_ADDR` | where p2pool pays out your BTC |
+| `DOICHAIN_RPC_PASSWORD` | required; `openssl rand -hex 32` |
+| `BITCOIN_RPC_PASSWORD` | required; `openssl rand -hex 32` |
+| `EXTERNAL_IP` | this host's public address, or the node stays invisible |
 
-## Basics to navigate with Doichain P2Pool and Doichain Bitcoind
-1. When starting Bitcoind first time, it downloads a pruned Bitcoin blockchain and starts syncing the last couple of blocks - please be patients and have a look on the following logs.
-2. Check p2pool log ```docker compose -f docker-compose-mining.yml logs -f p2pool```
-    - is p2pool connected to bitcoin? Or still showing "Bitcoin Core is in initial sync and waiting for blocks..."
-3. Check bitcoind log ```docker compose exec bitcoin tail -f /home/bitcoin/.bitcoin/debug.log``` 
+Compose refuses to start while the two passwords are empty. They are written
+into `doichain.conf` / `bitcoin.conf` on the **first** start only.
 
-## Basics to navigate with Doichain dApp 
-1. Connect to Doichain-dApp Container via ```docker-compose exec dapp bash```
-2. Connect to Doichain-dApp via browser http://localhost:3000
+```bash
+docker compose -f docker-compose-mining.yml up -d      # start
+docker compose -f docker-compose-mining.yml logs -f    # watch
+docker compose -f docker-compose-mining.yml down       # stop
+```
+
+On the first start, `bitcoin-init` downloads a pruned Bitcoin snapshot (~11 GB,
+about 25 GB free space needed during bootstrap). Until it is done, p2pool logs
+that it cannot reach the Bitcoin RPC — that is expected, not a fault.
+
+Details, open points and the reasoning: **[docs/stack-31.1.md](docs/stack-31.1.md)**.
+
+## Double Opt-In server
+
+```bash
+cp .env.email-doi.example .env
+```
+
+Then edit `.env`: `SERVER_NAME` (the public name, e.g. `doichain.example.com`),
+`RPC_USER`, `RPC_PASSWORD` (**change it**), and the `DAPP_SMTP_*` settings of the
+mail server that sends the confirmation mails.
+
+```bash
+docker compose -f docker-compose-email-doi-mainnet.yml up -d
+./init-letsencrypt.sh        # replace the self-signed certificate
+docker compose -f docker-compose-email-doi-mainnet.yml down
+```
+
+Use `docker-compose-email-doi-testnet.yml` for testnet; the dApp is on port 4000
+there instead of 3000.
+
+> **Upgrading an existing Opt-In install:** these stacks ran
+> `doichain/core:dc0.20.1.13` until September 2026, which follows the abandoned
+> 0.20.x branch. A volume from that era carries both that chain's data and a
+> BerkeleyDB wallet, and **Core 31 cannot load a BerkeleyDB wallet** — the dApp
+> will come up without one. Either start from an empty `doichain-volume`, or
+> migrate the wallet with `doichain-cli migratewallet` before pointing the dApp
+> at it.
+
+The dApp's JSON-RPC API is documented in the
+[dApp repository](https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md):
+[authentication](https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md#authentication),
+[requesting a DOI](https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md#create-opt-in),
+[adding a user or project](https://github.com/Doichain/dapp/blob/master/doc/en/json-rpc-api.md#create-user).
+
+## Ports
+
+Published on the host:
+
+| Port | Service | Stack |
+|---|---|---|
+| 8333 | Bitcoin P2P | mining |
+| 8338 | Doichain P2P | mining |
+| 9332 | p2pool | mining |
+| 50001 / 50002 / 50004 | ElectrumX TCP / SSL / WSS | mining |
+| 80, 443 | nginx | Opt-In |
+| 3000 (testnet: 4000) | dApp | Opt-In |
+
+**Deliberately not published:** the Doichain RPC (8339), the Bitcoin RPC (8332)
+and MongoDB. They are reachable inside the compose network only — a published
+RPC means an open door to a node with a wallet behind it.
+
+## Is it working?
+
+```bash
+# node: chain tip, and that it is on the DigiShield chain
+docker compose -f docker-compose-mining.yml exec doichain \
+  doichain-cli -datadir=/home/doichain/data/doichain getblockchaininfo
+docker compose -f docker-compose-mining.yml exec doichain \
+  doichain-cli -datadir=/home/doichain/data/doichain getblockhash 431018
+#   -> 71d50ff12b090561cc918ddb560334b4350758c7eace3f058dd332fb112f4b67
+
+# ElectrumX: index height against node height
+docker exec electrumx electrumx_rpc getinfo
+
+# p2pool: is it merge mining?
+docker compose -f docker-compose-mining.yml logs -f p2pool
+```
+
+From empty volumes the node had every block after about 20 minutes and the
+ElectrumX index was complete two minutes later, measured on Docker Desktop.
+
+## Everyday commands
+
+```bash
+docker compose -f <compose-file> ps            # what is running
+docker compose -f <compose-file> logs -f <service>
+docker compose -f <compose-file> exec <service> bash
+```
+
+Inside the Doichain container, `doichain-cli` needs the datadir:
+
+```bash
+doichain-cli -datadir=/home/doichain/data/doichain getblockchaininfo
+doichain-cli -datadir=/home/doichain/data/doichain getpeerinfo
+doichain-cli -datadir=/home/doichain/data/doichain getbalance
+```
+
+There are also convenience scripts in the repository root: `start-mining.sh`,
+`start-email-doi-mainnet.sh`, `start-email-doi-testnet.sh`, `stop.sh` and
+`deleteEverything.sh` (which removes containers **and volumes** — it deletes the
+chain data).
+
+## Documentation
+
+- **[docs/stack-31.1.md](docs/stack-31.1.md)** — the current stack: images,
+  ElectrumX, open points.
+- [docs/history-2026-09.md](docs/history-2026-09.md) — the relaunch work log of
+  September 2026; superseded, kept for the reasoning behind the decisions.
+- [TODO.md](TODO.md) — open items on the dApp and testnet side.
+- `contrib/nbits-audit.py` — finds blocks whose difficulty does not follow the
+  consensus rule.

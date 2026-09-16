@@ -1,5 +1,10 @@
-version: '3.7'
-
+# Doichain Double Opt-In server on TESTNET: nginx + certbot, a Doichain Core
+# node, the dApp and its MongoDB. The node runs Doichain Core 31.1; the 0.20.x
+# image this file used before follows the abandoned branch.
+#
+# Neither the node's RPC nor MongoDB is published on the host: the dApp reaches
+# both over the compose network (172.20.0.0/16). Publishing them meant an open
+# RPC with a wallet behind it, and an unauthenticated MongoDB.
 services:
   nginx:
     image: nginx:1.22.0
@@ -29,20 +34,29 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     
   doichain-testnet:
-    image: "doichain/core:dc0.20.1.13" 
+    # Doichain Core 31.1 -- the rules the network has followed since the
+    # DigiShield fork at block 431,017. The previous dc0.20.1.13 image follows
+    # the abandoned 0.20.x branch.
+    image: "doichain/core:v31.1.5"
     container_name: doichain-testnet
     hostname: doichain-testnet
-    ports:
-      - "18339:18339"
+    restart: unless-stopped
+    # Nothing published on purpose. The dApp reaches the RPC (18339) over the
+    # compose network; publishing it exposed a wallet-bearing RPC to the
+    # internet. To let this node serve others as well, publish 18338 (P2P) and
+    # set EXTERNAL_IP to the host's public address -- the RPC stays inside.
     volumes:
       - doichain-volume:/home/doichain/data
     environment:
       - TESTNET=true
+      # An explicit peer, kept from the 0.20.x setup. Mainnet needs none since
+      # v31.1.4 (fixed seeds plus the DNS seeder); whether testnet discovery
+      # works on its own has not been checked, so this stays until it has been.
       - CONNECTION_NODE=157.90.175.84
       - DAPP_URL=http://dapp:3000
       - RPC_USER=${RPC_USER}
       - RPC_PASSWORD=${RPC_PASSWORD}
-      - RPC_ALLOW_IP=0.0.0.0/0 #::/0
+      - RPC_ALLOW_IP=172.20.0.0/16
     stdin_open: true
     tty: true
     networks:
@@ -81,14 +95,17 @@ services:
         ipv4_address: 172.20.0.7
   
   mongo:
+    # mongo:3.2 reached end of life in 2018 and is kept only because the dApp
+    # image was built against it; a newer major version needs a data migration.
+    # Not published: it has no authentication configured, so the port it used to
+    # publish (28017) was an open database. The dApp reaches it over the network.
     image: "mongo:3.2"
     container_name: mongo
     hostname: mongo
+    restart: unless-stopped
     expose:
       - "27017"
-    ports:
-      - "28017:27017"
-    volumes: 
+    volumes:
       -  mongo-volume:/data
     networks:
       static-network:
