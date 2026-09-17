@@ -70,6 +70,24 @@ if [ -n "${EXTERNAL_IP:-}" ]; then
   EXTERNAL_IP_LINE="externalip=${EXTERNAL_IP}"
   echo "advertising external address: ${EXTERNAL_IP}"
 fi
+# ...but the line has to sit in the section of the network that is actually
+# active. Core refuses a global bind= while testnet or regtest is selected --
+# "Config setting for -bind only applied on regtest network when in [regtest]
+# section" -- and since doichaind is PID 1, the container then restart-loops
+# instead of coming up. Mainnet keeps it global, where it belongs.
+BIND_LINE="bind=0.0.0.0:${_NODE_PORT}"
+GLOBAL_BIND_LINE="${BIND_LINE}"
+TEST_BIND_LINE=""
+REGTEST_BIND_LINE=""
+if [ "$_TESTNET" = 1 ]; then
+  GLOBAL_BIND_LINE=""
+  TEST_BIND_LINE="${BIND_LINE}"
+fi
+if [ "$_REGTEST" = 1 ]; then
+  GLOBAL_BIND_LINE=""
+  REGTEST_BIND_LINE="${BIND_LINE}"
+fi
+
 DOICHAIN_CONF_FILE=/home/doichain/data/doichain/doichain.conf
 mkdir -p "$(dirname "$DOICHAIN_CONF_FILE")"
 if [ ! -f "$DOICHAIN_CONF_FILE" ]; then
@@ -78,7 +96,7 @@ echo "
 regtest=$_REGTEST
 testnet=$_TESTNET
 server=1
-bind=0.0.0.0:${_NODE_PORT}
+${GLOBAL_BIND_LINE}
 listenonion=0
 ${EXTERNAL_IP_LINE}
 rpcuser=${RPC_USER}
@@ -93,11 +111,13 @@ blocknotify=curl -X GET ${DAPP_URL}/api/v1/blocknotify?block=%s
 walletnotify=curl -X GET ${DAPP_URL}/api/v1/walletnotify?tx=%s
 
 [test]
+${TEST_BIND_LINE}
 rpcport=${_RPC_PORT}
 rpcbind=0.0.0.0
 rpcallowip=0.0.0.0/0
 
 [regtest]
+${REGTEST_BIND_LINE}
 rpcport=${_RPC_PORT}
 rpcbind=0.0.0.0
 rpcallowip=0.0.0.0/0" > $DOICHAIN_CONF_FILE
