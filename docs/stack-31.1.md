@@ -8,12 +8,31 @@ Goal: run the new Doichain Core **31.1** (nc31.1 / Bitcoin Core 31 base, with th
 DigiShield fast-DAA hard fork) together with p2pool and ElectrumX on a fresh
 host, instead of the legacy 0.20 images this repo shipped.
 
-## Status 2026-09-13: v31.1.5
+## Status 2026-09-18: v31.1.6
 
-- **Doichain Core v31.1.5 is released**: signed tag on `doichain-core`, a GitHub
-  release with static Linux binaries, and **`doichain/core:v31.1.5` on Docker
-  Hub** (also `latest`). The compose file **pulls** that image; nothing is built
-  from source any more.
+- **Doichain Core v31.1.6 is released** (2026-09-17): signed tag on
+  `doichain-core`, a GitHub release with static Linux binaries, and
+  **`doichain/core:v31.1.6` on Docker Hub** (also `latest`). The compose files
+  **pull** that image; nothing is built from source any more. Two fixes on top of
+  v31.1.5, no consensus change and no reindex: plain `help` works again (the
+  `name_doi` description started with a newline and took the whole call down in
+  every v31.1.x release), and `CLIENT_BUGREPORT` names a repository that accepts
+  issues. Replace the image and restart.
+- **The two chains.** The new rules took effect with block 431,017, but that
+  block is on both chains – the 0.20 nodes accepted it, because Doichain never
+  enforced `nBits`. They part at **431,018**: this chain has
+  `71d50ff12b090561cc918ddb560334b4350758c7eace3f058dd332fb112f4b67`, the old one
+  `bab49c132328d09664261c3061608442408d4f667eaa457ed874b879923f2d34`, both on the
+  same parent. Ask a node `getblockhash 431018` to see which chain it follows.
+  What keeps a v31.1.x node on this chain is the difficulty rule from
+  `DoiPowCheckHeight = 431017`, not a checkpoint: Core 31 has none, and the
+  chainwork floor cannot help either, because the old chain has more work (on
+  2026-09-18: 444,404 blocks at difficulty ~203 M against 432,230 at ~717 M).
+
+### Status 2026-09-13: v31.1.5
+
+- **v31.1.5**: signed tag, GitHub release with static Linux binaries, and
+  `doichain/core:v31.1.5` on Docker Hub.
 - **Fresh nodes join on their own.** v31.1.4 ships fixed seeds that all follow
   DigiShield, `dnsseed.doichain.org` hands out DigiShield nodes, and v31.1.5 fixed
   the last header-sync bug: a node with an empty datadir had all headers after

@@ -60,10 +60,10 @@ services:
         ipv4_address: 172.21.0.5
 
   doichain:
-   # Pulled from Docker Hub: built from the signed tag v31.1.5 (commit 6b95bf8412),
+   # Pulled from Docker Hub: built from the signed tag v31.1.6 (commit 373973af51),
    # the release whose binaries run on the fleet. To build it yourself instead:
-   #   docker build --build-arg DOICHAIN_VER=v31.1.5 -t doichain/core:v31.1.5 ./doichain
-   image: "doichain/core:v31.1.5"
+   #   docker build --build-arg DOICHAIN_VER=v31.1.6 -t doichain/core:v31.1.6 ./doichain
+   image: "doichain/core:v31.1.6"
    container_name: doichain
    hostname: doichain
    # The node is useless to the network if it cannot be reached: without an

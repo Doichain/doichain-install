@@ -244,3 +244,38 @@ docker compose -f docker-compose-mining.yml up -d
 source, and the two peers once recommended here (`2.28.75.43`,
 `136.243.155.62`) stall one block below the fork. Use the *Run* section at the
 top.
+
+## Addendum 2026-09-18: the chain did split after all, one block later
+
+Two statements above were true when they were written and are not any more. They
+stay where they are; this is what has happened since.
+
+**"No fork against the legacy nodes."** That held for the flag day block: the old
+0.20 nodes accepted 431017 despite its new difficulty, because Doichain never
+enforced `nBits`. Both chains then built their next block on it — and there they
+parted:
+
+| Height | This chain (v31.1.x) | The 0.20 chain |
+|---|---|---|
+| 431016 | `4f5e8c0e4efb3504f8923ea175e4e5e688963819dcfbe33cc7f5a28c33616823` | the same block |
+| 431017 | `75a4ca09bf092862061e0e1c9f066145962f222ef965f3e9ccc27c6bcd0da320` | the same block |
+| **431018** | **`71d50ff12b090561cc918ddb560334b4350758c7eace3f058dd332fb112f4b67`** | **`bab49c132328d09664261c3061608442408d4f667eaa457ed874b879923f2d34`** |
+
+Both blocks at 431018 name `75a4ca09…` as their parent. `getblockhash 431018` is
+therefore the one question that tells the chains apart; asking for 431017 proves
+nothing, because both have it.
+
+**The tip.** This chain stood at **432,230** on 2026-09-18, the old one at
+**444,404** — it is ahead because it kept mining at the old difficulty (~203 M
+against ~717 M here). The number *434542* used further up in "Risk to the
+network: none" is of that kind: the same file debunks it a few paragraphs
+earlier as a peer's self-declared height, and it was never a block of this chain.
+
+What keeps a v31.1.x node here is the difficulty rule from
+`DoiPowCheckHeight = 431017` (`validation.cpp`), not a checkpoint — Core 31 has
+none — and not `nMinimumChainWork` either: a floor high enough to exclude the old
+chain would exclude this one too, which has less work.
+
+Measured against all four `*.doi.works` ElectrumX servers, `doi-explorer.le-space.de`
+and the explorer of the old chain.
+
