@@ -1,9 +1,11 @@
 # Doichain Core 31.1 — nc31.1 / Bitcoin Core 31 base, built with CMake.
 # (Replaces the old 0.20-era autotools + BerkeleyDB 4.8 build.)
-# Pin the source at build time:  --build-arg DOICHAIN_VER=v31.1.1
+# Pin the source at build time:  --build-arg DOICHAIN_VER=v31.1.6
 FROM debian:12
 
-ARG DOICHAIN_VER=feat/digishield-daa
+# A release tag by default: a branch moves, so two builds of the same
+# Dockerfile would hold different code.
+ARG DOICHAIN_VER=v31.1.6
 ENV DOICHAIN_VER=$DOICHAIN_VER
 
 # Runtime / start-script vars (ports match Core 31: P2P 8338, RPC 8339)

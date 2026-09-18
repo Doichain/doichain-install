@@ -37,7 +37,7 @@ services:
     # Doichain Core 31.1 -- the rules the network has followed since the
     # DigiShield fork at block 431,017. The previous dc0.20.1.13 image follows
     # the abandoned 0.20.x branch.
-    image: "doichain/core:v31.1.5"
+    image: "doichain/core:v31.1.6"
     container_name: doichain-testnet
     hostname: doichain-testnet
     restart: unless-stopped
