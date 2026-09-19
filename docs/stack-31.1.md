@@ -12,8 +12,11 @@ host, instead of the legacy 0.20 images this repo shipped.
 
 - **Doichain Core v31.1.6 is released** (2026-09-17): signed tag on
   `doichain-core`, a GitHub release with static Linux binaries, and
-  **`doichain/core:v31.1.6` on Docker Hub** (also `latest`). The compose files
-  **pull** that image; nothing is built from source any more. Two fixes on top of
+  **`doichain/core:v31.1.6-1` on Docker Hub**. The compose files **pull** that
+  image; nothing is built from source any more. The `-1` is an image revision, not
+  a Core version: the plain `v31.1.6` image was pushed before the entrypoint fix of
+  #9, so it still restart-loops on testnet and regtest — and so does `latest`, which
+  still points at that older build. Name the tag, do not rely on `latest`. Two fixes on top of
   v31.1.5, no consensus change and no reindex: plain `help` works again (the
   `name_doi` description started with a newline and took the whole call down in
   every v31.1.x release), and `CLIENT_BUGREPORT` names a repository that accepts
